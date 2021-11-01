@@ -171,14 +171,15 @@ namespace ShippingRates.ShippingProviders
                         ? rates.Where(r => r.currencyCode == Shipment.Options.GetCurrencyCode())
                         : rates;
 
-                    var netCharge = rates.OrderByDescending(r => r.amount).FirstOrDefault();
+                    var netCharge = rates.OrderByDescending(r => r.amount)?.FirstOrDefault(x => x.rateType == ReturnedRateType.PAYOR_ACCOUNT_PACKAGE);
+
                     var deliveryDate = rateReplyDetail.DeliveryTimestampSpecified ? rateReplyDetail.DeliveryTimestamp : DateTime.Now.AddDays(30);
 
-                    AddRate(key, ServiceCodes[key], netCharge.amount, deliveryDate, new RateOptions()
+                    AddRate(key, ServiceCodes[key], netCharge?.amount ?? default(decimal), deliveryDate, new RateOptions()
                     {
                         SaturdayDelivery = rateReplyDetail.AppliedOptions?.Contains(ServiceOptionType.SATURDAY_DELIVERY) ?? false
                     },
-                    netCharge.currencyCode);
+                    netCharge?.currencyCode);
                 }
             }
         }
@@ -199,16 +200,16 @@ namespace ShippingRates.ShippingProviders
                 .ToArray();
         }
 
-        private (decimal amount, string currencyCode) GetCurrencyConvertedRate(ShipmentRateDetail rateDetail)
+        private (decimal amount, string currencyCode, ReturnedRateType rateType) GetCurrencyConvertedRate(ShipmentRateDetail rateDetail)
         {
             var shipmentCurrencyCode = Shipment.Options.GetCurrencyCode();
 
             if (rateDetail?.TotalNetCharge == null)
-                return (0, shipmentCurrencyCode);
+                return (0, shipmentCurrencyCode, rateDetail.RateType);
 
             var needCurrencyConversion = rateDetail.TotalNetCharge.Currency != shipmentCurrencyCode;
             if (!needCurrencyConversion)
-                return (rateDetail.TotalNetCharge.Amount, shipmentCurrencyCode);
+                return (rateDetail.TotalNetCharge.Amount, shipmentCurrencyCode, rateDetail.RateType);
 
             var canConvertCurrency = (rateDetail.CurrencyExchangeRate?.RateSpecified ?? false)
                 && rateDetail.TotalNetCharge.Currency == rateDetail.CurrencyExchangeRate.IntoCurrency
@@ -217,9 +218,9 @@ namespace ShippingRates.ShippingProviders
                 && rateDetail.CurrencyExchangeRate.Rate != 0;
 
             if (!canConvertCurrency)
-                return (rateDetail.TotalNetCharge.Amount, rateDetail.TotalNetCharge.Currency);
+                return (rateDetail.TotalNetCharge.Amount, rateDetail.TotalNetCharge.Currency, rateDetail.RateType);
 
-            return (Math.Round(rateDetail.TotalNetCharge.Amount / rateDetail.CurrencyExchangeRate.Rate, 2), shipmentCurrencyCode);
+            return (Math.Round(rateDetail.TotalNetCharge.Amount / rateDetail.CurrencyExchangeRate.Rate, 2), shipmentCurrencyCode, rateDetail.RateType);
         }
 
         /// <summary>
